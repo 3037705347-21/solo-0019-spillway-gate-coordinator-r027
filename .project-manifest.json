@@ -110,12 +110,34 @@
       "entry": "POST /commands/{id}/execute",
       "steps": [
         "validate the command, gate reservation, and one-time token",
+        "require the gate's current calibration to be registered and within its validity window",
         "apply approved to executing to terminal command transitions",
-        "settle the gate aperture and release the active command reference atomically"
+        "freeze the calibration basis on the command and settle the gate aperture and release the active command reference atomically"
       ],
       "success": "returns a completed command and an idle gate at the target aperture",
-      "failure": "returns conflict for an invalid or reused token; a simulated fault aborts the command and latches the gate in faulted status",
-      "verification": "workflowcheck executes a reviewed command, confirms the new aperture, and proves token reuse is rejected",
+      "failure": "returns conflict for an invalid or reused token, an unknown or expired calibration; a simulated fault aborts the command and latches the gate in faulted status",
+      "verification": "workflowcheck executes a reviewed command, confirms the new aperture and retained basis, and proves token reuse is rejected",
+      "module_ids": [
+        "entrypoint",
+        "httpapi",
+        "coordination",
+        "domain",
+        "storage",
+        "contracts"
+      ]
+    },
+    {
+      "id": "calibrate-gate-position",
+      "name": "Calibrate gate position",
+      "entry": "POST /gates/{id}/calibrations",
+      "steps": [
+        "validate the measurement basis, measured aperture, validity window, and recorder",
+        "reject recalibration unless the gate is idle, so reservations, movement, and faults cannot be bypassed",
+        "correct the live aperture to the measured value and atomically supersede the previous active calibration"
+      ],
+      "success": "returns the active calibration with its validity window and the corrected gate",
+      "failure": "returns not found for an unknown gate, invalid for a malformed or closed window, and conflict while the gate is reserved, moving, or faulted",
+      "verification": "workflowcheck registers and replaces calibrations, reads history, and proves unknown/expired bases block execution while terminal commands keep their basis",
       "module_ids": [
         "entrypoint",
         "httpapi",

@@ -28,6 +28,7 @@ type GateCommand struct {
 	ExecutionToken   string
 	ExecutedBy       string
 	TerminalReason   string
+	Calibration      *CalibrationBasis
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	Version          int64
@@ -112,6 +113,9 @@ func (c *GateCommand) Review(decision InterlockDecision, token string, now time.
 	return nil
 }
 
+// BeginExecution 校验命令状态、操作人和一次性令牌并转入 executing。
+// 这一步先于校准事实检查，保证终态命令的复读始终得到同一个终态冲突，
+// 不会因为当前校准随后失效而改变结果。
 func (c *GateCommand) BeginExecution(token, operator string, now time.Time) error {
 	if c.Status != CommandApproved {
 		return Conflict("command_not_executable", "only approved commands can execute")
@@ -127,6 +131,22 @@ func (c *GateCommand) BeginExecution(token, operator string, now time.Time) erro
 	c.Status = CommandExecuting
 	c.UpdatedAt = now.UTC()
 	c.Version++
+	return nil
+}
+
+// BindCalibrationBasis 在命令进入 executing 后冻结执行瞬间的校准事实。
+// 已结束命令保留的依据不受后续重新校准影响。
+func (c *GateCommand) BindCalibrationBasis(basis CalibrationBasis) error {
+	if c.Status != CommandExecuting {
+		return Conflict("command_not_executing", "calibration basis can only bind while executing")
+	}
+	basis.CalibrationID = strings.TrimSpace(basis.CalibrationID)
+	basis.Basis = strings.TrimSpace(basis.Basis)
+	if basis.CalibrationID == "" || basis.Basis == "" {
+		return Conflict("calibration_unknown", "command execution requires a valid calibration basis")
+	}
+	basisCopy := basis
+	c.Calibration = &basisCopy
 	return nil
 }
 

@@ -48,7 +48,7 @@ func (s *Service) ReviewInterlock(
 	ctx context.Context,
 	commandID string,
 	request contracts.ReviewInterlockRequest,
-) (domain.GateCommand, domain.Gate, error) {
+) (domain.GateCommand, domain.Gate, *domain.Calibration, error) {
 	decision, err := domain.NewInterlockDecision(
 		request.Verdict,
 		request.Verifier,
@@ -56,14 +56,14 @@ func (s *Service) ReviewInterlock(
 		s.now(),
 	)
 	if err != nil {
-		return domain.GateCommand{}, domain.Gate{}, err
+		return domain.GateCommand{}, domain.Gate{}, nil, err
 	}
 
 	token := ""
 	if decision.IsClear() {
 		token, err = s.newToken()
 		if err != nil {
-			return domain.GateCommand{}, domain.Gate{}, domain.Internal(
+			return domain.GateCommand{}, domain.Gate{}, nil, domain.Internal(
 				"execution_token_generation_failed",
 				"execution token could not be generated",
 			)
@@ -77,7 +77,7 @@ func (s *Service) ExecuteCommand(
 	ctx context.Context,
 	commandID string,
 	request contracts.ExecuteCommandRequest,
-) (domain.GateCommand, domain.Gate, error) {
+) (domain.GateCommand, domain.Gate, *domain.Calibration, error) {
 	return s.repository.ExecuteCommand(
 		ctx,
 		commandID,

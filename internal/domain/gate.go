@@ -18,14 +18,15 @@ const (
 var gateIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{2,31}$`)
 
 type Gate struct {
-	ID              string
-	Name            string
-	Status          GateStatus
-	Aperture        float64
-	MaxAperture     float64
-	ActiveCommandID string
-	UpdatedAt       time.Time
-	Version         int64
+	ID                   string
+	Name                 string
+	Status               GateStatus
+	Aperture             float64
+	MaxAperture          float64
+	ActiveCommandID      string
+	CurrentCalibrationID string
+	UpdatedAt            time.Time
+	Version              int64
 }
 
 func NewGate(id, name string, maxAperture, initialAperture float64, now time.Time) (Gate, error) {
@@ -103,6 +104,29 @@ func (g *Gate) Settle(finalAperture float64, faulted bool, now time.Time) error 
 	} else {
 		g.Status = GateIdle
 	}
+	g.UpdatedAt = now.UTC()
+	g.Version++
+	return nil
+}
+
+// Recalibrate 只允许作用于空闲闸门：占用中或故障的闸门不能借重新校准
+// 绕过现有占用，也不能借此清除故障。实时开度被修正为实测开度。
+func (g *Gate) Recalibrate(calibrationID string, measuredAperture float64, now time.Time) error {
+	if g.Status != GateIdle {
+		return Conflict("gate_not_idle", "gate must be idle before it can be recalibrated")
+	}
+	if g.ActiveCommandID != "" {
+		return Conflict("gate_already_reserved", "gate references an active command and cannot be recalibrated")
+	}
+	if strings.TrimSpace(calibrationID) == "" {
+		return Invalid("invalid_calibration_reference", "calibration id is required")
+	}
+	if measuredAperture < 0 || measuredAperture > g.MaxAperture {
+		return Invalid("invalid_measured_aperture", "measured aperture must be within the gate limit")
+	}
+
+	g.Aperture = measuredAperture
+	g.CurrentCalibrationID = calibrationID
 	g.UpdatedAt = now.UTC()
 	g.Version++
 	return nil

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"time"
 )
 
 func fixtureGate(
@@ -29,6 +30,36 @@ func fixtureGate(
 		return nil, fmt.Errorf("create fixture gate response: %w", err)
 	}
 	return gate, nil
+}
+
+func fixtureCalibration(
+	client *apiClient,
+	gateID string,
+	basis string,
+	measuredAperture float64,
+	validFor time.Duration,
+	recordedBy string,
+) (map[string]any, map[string]any, error) {
+	now := time.Now().UTC()
+	result, err := client.post("/gates/"+gateID+"/calibrations", map[string]any{
+		"basis":             basis,
+		"measured_aperture": measuredAperture,
+		"valid_from":        now.Add(-time.Minute).Format(time.RFC3339),
+		"valid_until":       now.Add(validFor).Format(time.RFC3339),
+		"recorded_by":       recordedBy,
+		"note":              "工作流检查登记",
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := requireStatus(result, http.StatusCreated, "register fixture calibration"); err != nil {
+		return nil, nil, err
+	}
+	calibration, err := objectField(result.Body, "calibration")
+	if err != nil {
+		return nil, nil, fmt.Errorf("register fixture calibration response: %w", err)
+	}
+	return calibration, result.Body, nil
 }
 
 func fixtureCommand(

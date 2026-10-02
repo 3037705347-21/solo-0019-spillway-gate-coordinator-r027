@@ -12,15 +12,40 @@ type InterlockDecisionView struct {
 	ReviewedAt string `json:"reviewed_at"`
 }
 
+// CalibrationBasisView 是命令执行时冻结的校准依据快照。
+type CalibrationBasisView struct {
+	CalibrationID    string  `json:"calibration_id"`
+	Basis            string  `json:"basis"`
+	MeasuredAperture float64 `json:"measured_aperture"`
+}
+
+type CalibrationView struct {
+	ID               string  `json:"id"`
+	GateID           string  `json:"gate_id"`
+	Basis            string  `json:"basis"`
+	MeasuredAperture float64 `json:"measured_aperture"`
+	ValidFrom        string  `json:"valid_from"`
+	ValidUntil       string  `json:"valid_until"`
+	RecordedBy       string  `json:"recorded_by"`
+	Note             string  `json:"note,omitempty"`
+	Status           string  `json:"status"`
+	CurrentlyValid   bool    `json:"currently_valid"`
+	CreatedAt        string  `json:"created_at"`
+	UpdatedAt        string  `json:"updated_at"`
+	Version          int64   `json:"version"`
+}
+
 type GateView struct {
-	ID              string  `json:"id"`
-	Name            string  `json:"name"`
-	Status          string  `json:"status"`
-	Aperture        float64 `json:"aperture"`
-	MaxAperture     float64 `json:"max_aperture"`
-	ActiveCommandID string  `json:"active_command_id,omitempty"`
-	UpdatedAt       string  `json:"updated_at"`
-	Version         int64   `json:"version"`
+	ID                   string           `json:"id"`
+	Name                 string           `json:"name"`
+	Status               string           `json:"status"`
+	Aperture             float64          `json:"aperture"`
+	MaxAperture          float64          `json:"max_aperture"`
+	ActiveCommandID      string           `json:"active_command_id,omitempty"`
+	CurrentCalibrationID string           `json:"current_calibration_id,omitempty"`
+	CurrentCalibration   *CalibrationView `json:"current_calibration,omitempty"`
+	UpdatedAt            string           `json:"updated_at"`
+	Version              int64            `json:"version"`
 }
 
 type CommandView struct {
@@ -35,6 +60,7 @@ type CommandView struct {
 	ExecutionToken   string                 `json:"execution_token,omitempty"`
 	ExecutedBy       string                 `json:"executed_by,omitempty"`
 	TerminalReason   string                 `json:"terminal_reason,omitempty"`
+	Calibration      *CalibrationBasisView  `json:"calibration,omitempty"`
 	CreatedAt        string                 `json:"created_at"`
 	UpdatedAt        string                 `json:"updated_at"`
 	Version          int64                  `json:"version"`
@@ -60,4 +86,14 @@ type ReviewCommandResponse struct {
 type ExecuteCommandResponse struct {
 	Command CommandView `json:"command"`
 	Gate    GateView    `json:"gate"`
+}
+
+type RegisterCalibrationResponse struct {
+	Calibration CalibrationView `json:"calibration"`
+	Gate        GateView        `json:"gate"`
+}
+
+type CalibrationHistoryResponse struct {
+	GateID       string            `json:"gate_id"`
+	Calibrations []CalibrationView `json:"calibrations"`
 }

@@ -2,20 +2,24 @@ package httpapi
 
 import (
 	"net/http"
+	"time"
 
 	"example.com/spillway-gate-coordinator/internal/coordination"
 )
 
 type handler struct {
 	service *coordination.Service
+	now     func() time.Time
 }
 
 func NewRouter(service *coordination.Service) http.Handler {
-	h := &handler{service: service}
+	h := &handler{service: service, now: time.Now}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", h.health)
 	mux.HandleFunc("POST /gates", h.registerGate)
 	mux.HandleFunc("GET /gates/{id}", h.gate)
+	mux.HandleFunc("POST /gates/{id}/calibrations", h.registerCalibration)
+	mux.HandleFunc("GET /gates/{id}/calibrations", h.calibrationHistory)
 	mux.HandleFunc("POST /commands", h.requestCommand)
 	mux.HandleFunc("GET /commands/{id}", h.command)
 	mux.HandleFunc("POST /commands/{id}/interlock", h.reviewInterlock)

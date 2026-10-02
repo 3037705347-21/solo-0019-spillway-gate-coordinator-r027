@@ -18,7 +18,7 @@ type Repository interface {
 		decision domain.InterlockDecision,
 		token string,
 		now time.Time,
-	) (domain.GateCommand, domain.Gate, error)
+	) (domain.GateCommand, domain.Gate, *domain.Calibration, error)
 	ExecuteCommand(
 		ctx context.Context,
 		commandID string,
@@ -26,5 +26,12 @@ type Repository interface {
 		operator string,
 		simulateFault bool,
 		now time.Time,
-	) (domain.GateCommand, domain.Gate, error)
+	) (domain.GateCommand, domain.Gate, *domain.Calibration, error)
+	RegisterCalibration(
+		ctx context.Context,
+		gateID string,
+		calibration domain.Calibration,
+		now time.Time,
+	) (domain.Calibration, domain.Gate, error)
+	CalibrationHistory(ctx context.Context, gateID string) ([]domain.Calibration, error)
 }

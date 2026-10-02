@@ -16,6 +16,8 @@ go run ./cmd/server --addr 127.0.0.1:18119
 ```text
 POST /gates
 GET  /gates/{id}
+POST /gates/{id}/calibrations
+GET  /gates/{id}/calibrations
 POST /commands
 GET  /commands/{id}
 POST /commands/{id}/interlock
@@ -32,6 +34,21 @@ POST /commands/{id}/execute
   "initial_aperture": 0.5
 }
 ```
+
+登记位置校准示例（只在闸门 idle 时接受，会把实时开度修正为实测开度）：
+
+```json
+{
+  "basis": "坝顶水准点 BM-07 复测",
+  "measured_aperture": 0.5,
+  "valid_from": "2026-10-02T08:00:00Z",
+  "valid_until": "2026-11-02T08:00:00Z",
+  "recorded_by": "maintainer-su",
+  "note": "季度校验"
+}
+```
+
+命令执行只接受闸门当前有效的校准事实；没有登记校准返回 `calibration_unknown`，校准超出 `valid_until` 返回 `calibration_expired`。已完成或已中止的命令保留执行当时的校准依据。
 
 提交命令示例：
 
@@ -82,6 +99,7 @@ go run ./cmd/workflowcheck --workflow register-gate
 go run ./cmd/workflowcheck --workflow request-gate-command
 go run ./cmd/workflowcheck --workflow review-safety-interlock
 go run ./cmd/workflowcheck --workflow execute-gate-command
+go run ./cmd/workflowcheck --workflow calibrate-gate-position
 ```
 
 这些检查会创建临时 HTTP 服务并调用真实路由。它们不调用外部网络，也不依赖数据库。

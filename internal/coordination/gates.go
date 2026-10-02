@@ -24,6 +24,22 @@ func (s *Service) RegisterGate(ctx context.Context, request contracts.RegisterGa
 	return gate, nil
 }
 
-func (s *Service) Gate(ctx context.Context, id string) (domain.Gate, error) {
-	return s.repository.Gate(ctx, id)
+func (s *Service) Gate(ctx context.Context, id string) (domain.Gate, *domain.Calibration, error) {
+	gate, err := s.repository.Gate(ctx, id)
+	if err != nil {
+		return domain.Gate{}, nil, err
+	}
+	if gate.CurrentCalibrationID == "" {
+		return gate, nil, nil
+	}
+	history, err := s.repository.CalibrationHistory(ctx, id)
+	if err != nil {
+		return domain.Gate{}, nil, err
+	}
+	for i := range history {
+		if history[i].ID == gate.CurrentCalibrationID {
+			return gate, &history[i], nil
+		}
+	}
+	return gate, nil, nil
 }
