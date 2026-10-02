@@ -124,6 +124,28 @@
         "storage",
         "contracts"
       ]
+    },
+    {
+      "id": "calibrate-gate",
+      "name": "Register gate calibration",
+      "entry": "POST /gates/{id}/calibrations",
+      "steps": [
+        "validate the measurement reference, trusted aperture interval and validity window against the gate limit",
+        "append the calibration fact as the new authoritative fact without touching gate occupancy",
+        "gate command execution on the newest current fact covering both movement endpoints",
+        "freeze the calibration basis when execution starts and retain it on terminal commands"
+      ],
+      "success": "returns the registered calibration; an approved command executes only against a current calibration and keeps that basis forever",
+      "failure": "calibration_unknown without a fact, calibration_not_current when expired, aperture_outside_calibration outside the trusted interval; terminal replays keep failing on command state",
+      "verification": "workflowcheck registers expired and current facts, recalibrates around a reserved gate, replays terminal commands, and checks unknown and stale calibrations; unit tests cover the concurrent critical section",
+      "module_ids": [
+        "entrypoint",
+        "httpapi",
+        "coordination",
+        "domain",
+        "storage",
+        "contracts"
+      ]
     }
   ],
   "complexity": {

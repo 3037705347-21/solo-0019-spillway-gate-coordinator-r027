@@ -12,6 +12,23 @@ type InterlockDecisionView struct {
 	ReviewedAt string `json:"reviewed_at"`
 }
 
+// CalibrationView is used both for registered calibration facts and for the
+// calibration basis frozen onto an executed command. GateID is empty when the
+// view is embedded as a command basis.
+type CalibrationView struct {
+	ID               string  `json:"id"`
+	GateID           string  `json:"gate_id,omitempty"`
+	Reference        string  `json:"reference"`
+	MeasuredAperture float64 `json:"measured_aperture"`
+	MinAperture      float64 `json:"min_aperture"`
+	MaxAperture      float64 `json:"max_aperture"`
+	ValidFrom        string  `json:"valid_from"`
+	ValidUntil       string  `json:"valid_until"`
+	RegisteredBy     string  `json:"registered_by"`
+	Note             string  `json:"note,omitempty"`
+	RegisteredAt     string  `json:"registered_at"`
+}
+
 type GateView struct {
 	ID              string  `json:"id"`
 	Name            string  `json:"name"`
@@ -35,6 +52,7 @@ type CommandView struct {
 	ExecutionToken   string                 `json:"execution_token,omitempty"`
 	ExecutedBy       string                 `json:"executed_by,omitempty"`
 	TerminalReason   string                 `json:"terminal_reason,omitempty"`
+	CalibrationBasis *CalibrationView       `json:"calibration_basis,omitempty"`
 	CreatedAt        string                 `json:"created_at"`
 	UpdatedAt        string                 `json:"updated_at"`
 	Version          int64                  `json:"version"`
@@ -60,4 +78,12 @@ type ReviewCommandResponse struct {
 type ExecuteCommandResponse struct {
 	Command CommandView `json:"command"`
 	Gate    GateView    `json:"gate"`
+}
+
+type RegisterCalibrationResponse struct {
+	Calibration CalibrationView `json:"calibration"`
+}
+
+type GateCalibrationsResponse struct {
+	Calibrations []CalibrationView `json:"calibrations"`
 }

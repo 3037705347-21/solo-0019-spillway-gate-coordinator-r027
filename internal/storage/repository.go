@@ -27,4 +27,6 @@ type Repository interface {
 		simulateFault bool,
 		now time.Time,
 	) (domain.GateCommand, domain.Gate, error)
+	RegisterCalibration(ctx context.Context, calibration domain.Calibration) (domain.Calibration, error)
+	GateCalibrations(ctx context.Context, gateID string) ([]domain.Calibration, error)
 }

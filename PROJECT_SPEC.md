@@ -9,12 +9,14 @@
 - 运行协调员：登记闸门并提交开度调整命令。
 - 安全复核员：提交联锁结论，决定命令是否通过。
 - 闸门操作员：凭执行令牌启动命令并登记执行结果。
+- 维护人员：按测量基准登记闸门位置校准事实及其有效开度范围与有效期。
 
 ## 核心实体
 
 - `gate`：闸门及其当前开度、运行状态、最大开度和活动命令。
-- `gate_command`：一次开度调整申请，包含目标开度、申请原因、状态和执行令牌。
+- `gate_command`：一次开度调整申请，包含目标开度、申请原因、状态、执行令牌以及执行开始时冻结的校准依据。
 - `interlock_decision`：安全复核结论，状态为 clear 或 blocked。
+- `gate_calibration`：维护人员登记的位置校准事实，记录测量基准、测量开度、可信开度区间、有效期、登记人和登记时间；同一闸门最新登记的事实是唯一权威事实。
 
 ## 业务流程
 
@@ -32,7 +34,13 @@
 
 ### execute-gate-command
 
-闸门操作员通过 `POST /commands/{id}/execute` 提交执行令牌。服务校验命令、令牌、闸门占用关系和目标开度，在临界区内完成 approved、executing、completed 或 aborted 的转换，并同步更新闸门状态。令牌在命令结束后失效，不能复用。
+闸门操作员通过 `POST /commands/{id}/execute` 提交执行令牌。服务先校验命令状态与一次性令牌，再在同一临界区内选取闸门当前权威校准事实并校验其在执行时刻有效、且起止开度都落在可信开度区间内，随后完成 approved、executing、completed 或 aborted 的转换，并同步更新闸门状态。命令进入 executing 时冻结当时校准依据；令牌在命令结束后失效，不能复用。
+
+### register-gate-calibration
+
+维护人员通过 `POST /gates/{id}/calibrations` 登记校准事实，提交测量基准、测量开度、可信开度区间、有效期和登记人。服务校验闸门存在、区间位于闸门物理开度之内、测量开度位于区间之内、有效期起点早于终点。每次登记都会成为该闸门的权威事实，不覆盖或删除历史事实；登记操作不改变闸门状态和活动命令占用，因此不能绕过现有占用或终态。
+
+`GET /gates/{id}/calibrations` 按登记顺序返回该闸门全部校准事实。
 
 ## 状态与规则
 
@@ -40,6 +48,11 @@
 - `gate_command` 状态：pending、approved、rejected、executing、completed、aborted。
 - 只有 pending 命令可以复核。
 - 只有 approved 命令可以执行，且执行令牌必须匹配。
+- 命令执行必须基于该闸门当前权威校准事实：无任何事实返回 `calibration_unknown`，事实未生效或已过期返回 `calibration_not_current`，起止开度超出可信区间返回 `aperture_outside_calibration`。
+- 校准事实的有效期为半开区间 [valid_from, valid_until)，到期时刻起不再可信。
+- 命令进入 executing 时冻结校准依据；completed 与 aborted 命令永久保留该依据，后续重新校准不回写历史命令。
+- 重新校准只追加事实，不改闸门状态或活动命令引用，不能释放占用、中止执行或绕过终态。
+- 已完成或已中止命令的重复执行一律返回命令状态冲突，与校准变化无关。
 - clear 复核与闸门占用必须同时成功；任一步失败时两者都不写入。
 - blocked 复核使命令 rejected，不会占用闸门。
 - 模拟故障会令命令 aborted、闸门 faulted，并保留最终开度。
@@ -64,6 +77,8 @@
 - `GET /commands/{id}`
 - `POST /commands/{id}/interlock`
 - `POST /commands/{id}/execute`
+- `POST /gates/{id}/calibrations`
+- `GET /gates/{id}/calibrations`
 
 错误响应统一为：
 
@@ -73,4 +88,4 @@
 
 ## 验证计划
 
-本初始化基线刻意不生成单元测试、夹具或浏览器测试文件，也不声明 `test_command`。后续任务阶段负责补充测试，并在该阶段建立红绿验证。当前每条工作流通过 `cmd/workflowcheck` 启动真实 HTTP 服务并调用公开接口，校验成功状态、持久化结果和关键失败分支。
+当前每条工作流通过 `cmd/workflowcheck` 启动真实 HTTP 服务并调用公开接口，校验成功状态、持久化结果和关键失败分支。`calibrate-gate` 工作流覆盖过期校准拒绝、重新校准后执行、历史命令复读、可信区间越界、占用期间重新校准、未知基准和稳定校验错误；领域与仓库层另有单元测试覆盖有效期边界、依据冻结和重新校准与执行并发。

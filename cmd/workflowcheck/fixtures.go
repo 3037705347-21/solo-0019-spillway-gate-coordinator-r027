@@ -79,3 +79,32 @@ func fixtureClearReview(
 	}
 	return command, nil
 }
+
+func fixtureCalibration(
+	client *apiClient,
+	gateID string,
+	minAperture float64,
+	maxAperture float64,
+) (map[string]any, error) {
+	result, err := client.post("/gates/"+gateID+"/calibrations", map[string]any{
+		"reference":         "测量基准点 BM-2026-A",
+		"measured_aperture": 0.25,
+		"min_aperture":      minAperture,
+		"max_aperture":      maxAperture,
+		"valid_from":        "2026-01-01T00:00:00Z",
+		"valid_until":       "2027-01-01T00:00:00Z",
+		"registered_by":     "maintainer-he",
+		"note":              "季度测量后登记",
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := requireStatus(result, http.StatusCreated, "register fixture calibration"); err != nil {
+		return nil, err
+	}
+	calibration, err := objectField(result.Body, "calibration")
+	if err != nil {
+		return nil, fmt.Errorf("register fixture calibration response: %w", err)
+	}
+	return calibration, nil
+}

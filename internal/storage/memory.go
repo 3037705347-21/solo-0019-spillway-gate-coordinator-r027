@@ -9,15 +9,17 @@ import (
 )
 
 type MemoryRepository struct {
-	mu       sync.RWMutex
-	gates    map[string]domain.Gate
-	commands map[string]domain.GateCommand
+	mu           sync.RWMutex
+	gates        map[string]domain.Gate
+	commands     map[string]domain.GateCommand
+	calibrations map[string][]domain.Calibration
 }
 
 func NewMemoryRepository() *MemoryRepository {
 	return &MemoryRepository{
-		gates:    make(map[string]domain.Gate),
-		commands: make(map[string]domain.GateCommand),
+		gates:        make(map[string]domain.Gate),
+		commands:     make(map[string]domain.GateCommand),
+		calibrations: make(map[string][]domain.Calibration),
 	}
 }
 
@@ -136,7 +138,30 @@ func (m *MemoryRepository) ExecuteCommand(
 	}
 
 	nextCommand := cloneCommand(command)
-	if err := nextCommand.BeginExecution(token, operator, now); err != nil {
+	// State and token are validated before the calibration guard. Replaying a
+	// command that is already completed or aborted must therefore fail with
+	// the same command-state conflict no matter what happened to the
+	// calibration afterwards.
+	if err := nextCommand.ValidateExecutionStart(token, operator); err != nil {
+		return domain.GateCommand{}, domain.Gate{}, err
+	}
+
+	// The authoritative calibration is selected inside the same critical
+	// section as the command and gate transitions, so a concurrent
+	// recalibration cannot interleave with this movement.
+	calibration, hasCalibration := domain.CurrentCalibration(m.calibrations[command.GateID])
+	if !hasCalibration {
+		return domain.GateCommand{}, domain.Gate{}, domain.Conflict(
+			"calibration_unknown",
+			"the gate has no registered position calibration to execute against",
+		)
+	}
+	if err := calibration.GuardExecution(command.StartingAperture, command.TargetAperture, now); err != nil {
+		return domain.GateCommand{}, domain.Gate{}, err
+	}
+	basis := calibration.Snapshot()
+
+	if err := nextCommand.BeginExecution(token, operator, basis, now); err != nil {
 		return domain.GateCommand{}, domain.Gate{}, err
 	}
 
@@ -166,11 +191,50 @@ func (m *MemoryRepository) ExecuteCommand(
 	return cloneCommand(nextCommand), nextGate, nil
 }
 
-func cloneCommand(command domain.GateCommand) domain.GateCommand {
-	if command.Interlock == nil {
-		return command
+func (m *MemoryRepository) RegisterCalibration(
+	_ context.Context,
+	calibration domain.Calibration,
+) (domain.Calibration, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, exists := m.gates[calibration.GateID]; !exists {
+		return domain.Calibration{}, domain.NotFound("gate_not_found", "gate id was not found")
 	}
-	decision := *command.Interlock
-	command.Interlock = &decision
+	for _, existing := range m.calibrations[calibration.GateID] {
+		if existing.ID == calibration.ID {
+			return domain.Calibration{}, domain.Conflict("duplicate_calibration_id", "calibration id already exists")
+		}
+	}
+
+	// Appending a fact never touches the gate status or its active command,
+	// so recalibration cannot clear a reservation, interrupt a movement, or
+	// rewrite the evidence of a terminal command.
+	m.calibrations[calibration.GateID] = append(m.calibrations[calibration.GateID], calibration)
+	return calibration, nil
+}
+
+func (m *MemoryRepository) GateCalibrations(_ context.Context, gateID string) ([]domain.Calibration, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if _, exists := m.gates[gateID]; !exists {
+		return nil, domain.NotFound("gate_not_found", "gate id was not found")
+	}
+	history := m.calibrations[gateID]
+	result := make([]domain.Calibration, len(history))
+	copy(result, history)
+	return result, nil
+}
+
+func cloneCommand(command domain.GateCommand) domain.GateCommand {
+	if command.Interlock != nil {
+		decision := *command.Interlock
+		command.Interlock = &decision
+	}
+	if command.CalibrationBasis != nil {
+		basis := *command.CalibrationBasis
+		command.CalibrationBasis = &basis
+	}
 	return command
 }

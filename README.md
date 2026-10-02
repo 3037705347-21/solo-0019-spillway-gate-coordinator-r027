@@ -1,6 +1,6 @@
 # 泄洪闸门操作协调服务
 
-这是一个无外部依赖的 Go 后端，用本地内存仓库协调闸门登记、开度调整命令、安全联锁复核和执行结果。服务强调单闸门活动命令互斥、原子状态转换、执行令牌生命周期和稳定错误传播。
+这是一个无外部依赖的 Go 后端，用本地内存仓库协调闸门登记、开度调整命令、安全联锁复核、执行结果和位置校准。服务强调单闸门活动命令互斥、原子状态转换、执行令牌生命周期、校准事实有效期和稳定错误传播。
 
 ## 运行
 
@@ -20,6 +20,8 @@ POST /commands
 GET  /commands/{id}
 POST /commands/{id}/interlock
 POST /commands/{id}/execute
+POST /gates/{id}/calibrations
+GET  /gates/{id}/calibrations
 ```
 
 登记闸门示例：
@@ -64,6 +66,26 @@ POST /commands/{id}/execute
 }
 ```
 
+命令执行只接受闸门当前有效的校准事实。维护人员先登记测量基准、可信开度区间和有效期：
+
+```json
+{
+  "reference": "测量基准点 BM-2026-A",
+  "measured_aperture": 0.5,
+  "min_aperture": 0,
+  "max_aperture": 4.5,
+  "valid_from": "2026-01-01T00:00:00Z",
+  "valid_until": "2027-01-01T00:00:00Z",
+  "registered_by": "maintainer-he",
+  "note": "季度测量后登记"
+}
+```
+
+- 没有任何校准事实时执行返回 `409 calibration_unknown`。
+- 最新事实未生效或已过期时执行返回 `409 calibration_not_current`（有效期为半开区间，到期时刻即失效）。
+- 起始或目标开度超出可信区间时执行返回 `409 aperture_outside_calibration`。
+- 重新校准只追加新事实，不解除闸门占用、不改变终态命令；命令开始执行时冻结当时依据，completed/aborted 后永久保留。
+
 ## 目录
 
 - `cmd/server`：服务进程。
@@ -82,10 +104,15 @@ go run ./cmd/workflowcheck --workflow register-gate
 go run ./cmd/workflowcheck --workflow request-gate-command
 go run ./cmd/workflowcheck --workflow review-safety-interlock
 go run ./cmd/workflowcheck --workflow execute-gate-command
+go run ./cmd/workflowcheck --workflow calibrate-gate
 ```
 
 这些检查会创建临时 HTTP 服务并调用真实路由。它们不调用外部网络，也不依赖数据库。
 
-## 测试状态
+## 测试
 
-测试有意延后。当前交付仅包含初始化基线和生产级 smoke 检查；后续任务阶段会添加自动化测试与红绿验证，不应把当前没有测试文件视为项目未完成。
+领域层与仓库层提供自动化测试，覆盖校准有效期边界、可信区间、依据冻结，以及重新校准与执行并发时的单一一致结果：
+
+```sh
+go test ./...
+```

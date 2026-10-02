@@ -109,3 +109,31 @@ func (h *handler) executeCommand(w http.ResponseWriter, r *http.Request) {
 		},
 	)
 }
+
+func (h *handler) registerCalibration(w http.ResponseWriter, r *http.Request) {
+	var request contracts.RegisterCalibrationRequest
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeDomainError(w, err)
+		return
+	}
+
+	calibration, err := h.service.RegisterCalibration(r.Context(), r.PathValue("id"), request)
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, contracts.RegisterCalibrationResponse{Calibration: calibrationView(calibration)})
+}
+
+func (h *handler) gateCalibrations(w http.ResponseWriter, r *http.Request) {
+	calibrations, err := h.service.GateCalibrations(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	views := make([]contracts.CalibrationView, 0, len(calibrations))
+	for _, calibration := range calibrations {
+		views = append(views, calibrationView(calibration))
+	}
+	writeJSON(w, http.StatusOK, contracts.GateCalibrationsResponse{Calibrations: views})
+}

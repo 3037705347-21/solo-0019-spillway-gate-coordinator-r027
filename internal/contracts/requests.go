@@ -25,3 +25,14 @@ type ExecuteCommandRequest struct {
 	Token         string `json:"token"`
 	SimulateFault bool   `json:"simulate_fault"`
 }
+
+type RegisterCalibrationRequest struct {
+	Reference        string  `json:"reference"`
+	MeasuredAperture float64 `json:"measured_aperture"`
+	MinAperture      float64 `json:"min_aperture"`
+	MaxAperture      float64 `json:"max_aperture"`
+	ValidFrom        string  `json:"valid_from"`
+	ValidUntil       string  `json:"valid_until"`
+	RegisteredBy     string  `json:"registered_by"`
+	Note             string  `json:"note"`
+}

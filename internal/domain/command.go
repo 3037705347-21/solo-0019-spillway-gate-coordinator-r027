@@ -28,6 +28,10 @@ type GateCommand struct {
 	ExecutionToken   string
 	ExecutedBy       string
 	TerminalReason   string
+	// CalibrationBasis is frozen when execution begins and never rewritten
+	// afterwards, so completed and aborted commands keep the calibration
+	// fact the movement was actually based on, even after recalibration.
+	CalibrationBasis *CalibrationBasis
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	Version          int64
@@ -112,7 +116,11 @@ func (c *GateCommand) Review(decision InterlockDecision, token string, now time.
 	return nil
 }
 
-func (c *GateCommand) BeginExecution(token, operator string, now time.Time) error {
+// ValidateExecutionStart checks command status, operator, and the one-time
+// token without mutating the command. It deliberately does not look at
+// calibration, so replaying a terminal command fails the same way after a
+// recalibration or an expired calibration as it did originally.
+func (c *GateCommand) ValidateExecutionStart(token, operator string) error {
 	if c.Status != CommandApproved {
 		return Conflict("command_not_executable", "only approved commands can execute")
 	}
@@ -122,8 +130,20 @@ func (c *GateCommand) BeginExecution(token, operator string, now time.Time) erro
 	if strings.TrimSpace(token) == "" || token != c.ExecutionToken {
 		return Conflict("invalid_execution_token", "execution token is invalid")
 	}
+	return nil
+}
 
+func (c *GateCommand) BeginExecution(token, operator string, basis CalibrationBasis, now time.Time) error {
+	if err := c.ValidateExecutionStart(token, operator); err != nil {
+		return err
+	}
+	if strings.TrimSpace(basis.CalibrationID) == "" {
+		return Conflict("calibration_unknown", "the gate has no registered position calibration to execute against")
+	}
+
+	basisCopy := basis
 	c.ExecutedBy = strings.TrimSpace(operator)
+	c.CalibrationBasis = &basisCopy
 	c.Status = CommandExecuting
 	c.UpdatedAt = now.UTC()
 	c.Version++
